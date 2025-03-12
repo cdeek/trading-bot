@@ -1,0 +1,22 @@
+{
+  "name": "my-token-analyzer",
+  "version": "1.0.0",
+  "description": "A token analyzer dashboard with auto trading functionality using GMGN, Rugcheck.xyz, and TweetScout.io.",
+  "main": "app.js",
+  "type": "module",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.30.1",
+    "@solana/web3.js": "^1.98.0",
+    "bs58": "^6.0.0",
+    "cross-fetch": "^4.1.0",
+    "ejs": "^3.1.8",
+    "express": "^4.18.2",
+    "p-retry": "^6.2.1",
+    "socket.io": "^4.6.1"
+  }
+}

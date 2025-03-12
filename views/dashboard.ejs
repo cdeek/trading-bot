@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Dashboard</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script defer src="/socket.io/socket.io.js"></script>
+    <script defer src="/script.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Trading Dashboard</h1>
+        <div class="status">
+            <p><strong>Auto Trade:</strong> <span id="autoTradeStatus"><%= autoTrade ? 'ON ✅' : 'OFF ❌' %></span></p>
+            <button id="toggleAutoTrade"><%= autoTrade ? 'Turn OFF' : 'Turn ON' %></button>
+        </div>
+
+        <h2>Trade Settings</h2>
+        <form id="thresholdForm">
+            <label>Max Trades:
+                <input type="number" name="maxTrade" value="<%= thresholds.maxTrade %>" required>
+            </label>
+            <label>Top Holders (%):
+                <input type="number" name="topHoldersPct" value="<%= thresholds.topHoldersPct %>" required>
+            </label>
+            <label>Trade Amount:
+                <input type="number" name="tradeAmount" value="<%= thresholds.tradeAmount %>" required>
+            </label>
+            <label>Trade Threshold:
+                <input type="number" name="tradeThreshold" value="<%= thresholds.tradeThreshold %>" required>
+            </label>
+            <label>Polling Interval (ms):
+                <input type="number" name="pollInterval" value="<%= thresholds.pollInterval %>" required>
+            </label>
+            <button type="submit">Update Settings</button>
+        </form>
+
+        <h2>Latest Market Analysis</h2>
+        <div id="marketAnalysis">
+            <% if (analysis) { %>
+                <p><strong>Last Update:</strong> <%= analysis.timestamp %></p>
+                <p><strong>Tokens Fetched:</strong> <%= analysis.totalTokensFetched %></p>
+                <p><strong>Verified Tokens:</strong> <%= analysis.verifiedCount %></p>
+            <% } else { %>
+                <p>No analysis data available.</p>
+            <% } %>
+        </div>
+
+        <h2>Notifications</h2>
+        <div id="notifications"></div>
+    </div>
+</body>
+</html>
