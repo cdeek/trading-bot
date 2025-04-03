@@ -13,26 +13,49 @@
         <h1>Trading Dashboard</h1>
         <div class="status">
             <p><strong>Auto Trade:</strong> <span id="autoTradeStatus"><%= autoTrade ? 'ON ✅' : 'OFF ❌' %></span></p>
-            <button id="toggleAutoTrade"><%= autoTrade ? 'Turn OFF' : 'Turn ON' %></button>
+            <button id="toggleAutoTrade" aria-label="Toggle Auto Trade">
+                <%= autoTrade ? 'Turn OFF' : 'Turn ON' %>
+            </button>
         </div>
 
         <h2>Trade Settings</h2>
         <form id="thresholdForm">
-            <label>Max Trades:
-                <input type="number" name="maxTrade" value="<%= thresholds.maxTrade %>" required>
-            </label>
-            <label>Top Holders (%):
-                <input type="number" name="topHoldersPct" value="<%= thresholds.topHoldersPct %>" required>
-            </label>
-            <label>Trade Amount:
-                <input type="number" name="tradeAmount" value="<%= thresholds.tradeAmount %>" required>
-            </label>
-            <label>Trade Threshold:
-                <input type="number" name="tradeThreshold" value="<%= thresholds.tradeThreshold %>" required>
-            </label>
-            <label>Polling Interval (ms):
-                <input type="number" name="pollInterval" value="<%= thresholds.pollInterval %>" required>
-            </label>
+            <label for="liquidity1">Liquidity < 48: </label>
+            <input type="number" id="liquidity1" name="liquidity1" value="<%= thresholds.liquidity1 || 0 %>" required min="0">
+            
+            <label for="liquidity2">Liquidity: </label>
+            <input type="number" id="liquidity2" name="liquidity2" value="<%= thresholds.liquidity2 || 0 %>" required min="0">
+            
+            <label for="fdv1">FDV < 48: </label>
+            <input type="number" id="fdv1" name="fdv1" value="<%= thresholds.fdv1 || 0 %>" required min="0">
+            
+            <label for="fdv2">FDV: </label>
+            <input type="number" id="fdv2" name="fdv2" value="<%= thresholds.fdv2 || 0 %>" required min="0">
+            
+            <label for="txns">Max Transactions: </label>
+            <input type="number" id="txns" name="txns" value="<%= thresholds.txns || 0 %>" required min="0">
+            
+            <label for="txns24H">Max Transactions24H: </label>
+            <input type="number" id="txns24H" name="txns24H" value="<%= thresholds.txns24H || 0 %>" required min="0">
+            
+            <label for="volume24H">Volume24H: </label>
+            <input type="number" id="volume24H" name="volume24H" value="<%= thresholds.volume24H || 0 %>" required min="0">
+            
+            <label for="maxTrade">Max Trades:</label>
+            <input type="number" id="maxTrade" name="maxTrade" value="<%= thresholds.maxTrade || 0 %>" required min="0">
+
+            <label for="topHoldersPct">Top Holders (%):</label>
+            <input type="number" id="topHoldersPct" name="topHoldersPct" value="<%= thresholds.topHoldersPct || 0 %>" required min="0" max="100">
+
+            <label for="tradeAmount">Trade Amount In Lamport:</label>
+            <input type="number" id="tradeAmount" name="tradeAmount" value="<%= thresholds.tradeAmount || 0 %>" required min="0">
+
+            <label for="tradeThreshold">Trade Threshold:</label>
+            <input type="number" id="tradeThreshold" name="tradeThreshold" value="<%= thresholds.tradeThreshold || 0 %>" required min="0">
+
+            <label for="pollInterval">Polling Interval (ms):</label>
+            <input type="number" id="pollInterval" name="pollInterval" value="<%= thresholds.pollInterval || 0 %>" required min="0">
+
             <button type="submit">Update Settings</button>
         </form>
 
@@ -48,7 +71,9 @@
         </div>
 
         <h2>Notifications</h2>
-        <div id="notifications"></div>
+        <div id="notifications">
+            <p>No notifications yet.</p> <!-- Placeholder for empty notifications -->
+        </div>
     </div>
 </body>
 </html>

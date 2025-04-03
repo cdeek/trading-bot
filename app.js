@@ -3,14 +3,11 @@ import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { Server } from 'socket.io';
-import fs from 'fs';
-import { access, writeFile } from 'fs/promises';
 import fetch from 'node-fetch';
 import pRetry from 'p-retry';
 import config from './config.js';
-// import { executeTrade, tradeEmitter } from './transaction/index.js';
+// import { executeTrade, tradeEmitter } from './transaction/index.js'; 
 
-// Set __filename and __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -19,25 +16,29 @@ const server = http.createServer(app);
 const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 
-// --- Configurable thresholds (default values) ---
 let thresholds = {
-  maxTrade: 5,
+  liquidity1: 10000,
+  fdv1: 100000,
+  liquidity2: 75000,
+  fdv2: 500000,
+  txns: 50,
+  txns24H: 50,
+  volume24H: 1000000,
+  maxTrade: 20,
   topHoldersPct: 50,
   tradeAmount: 1000000,
   tradeThreshold: 10,
-  pollInterval: (10000 * 120)
+  pollInterval: 100000 * 6,
 };
 
-// Add a Set to track processed tokens
 const processedTokens = new Set();
+let autoTradeEnabled = false;
+let latestAnalysis = null;
 
 app.use(express.json());
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
-
-let autoTradeEnabled = false;
-let latestAnalysis = null;
 
 app.post('/thresholds', (req, res) => {
   const newThresholds = req.body;
@@ -54,28 +55,23 @@ app.get('/', (req, res) => {
 });
 
 app.get('/toggle-autotrade', (req, res) => {
-  if (autoTradeEnabled) {
-    autoTradeEnabled = false;
-    return;
-  }
-  autoTradeEnabled = true;
+  autoTradeEnabled = !autoTradeEnabled;
   io.emit('notification', { message: `🔄 Auto trade turned ${autoTradeEnabled ? 'ON ✅' : 'OFF ❌'}` });
   res.json({ autoTrade: autoTradeEnabled });
 });
 
-
-async function verifyWithRugcheck(tokenAddress) { 
+async function verifyWithRugcheck(tokenAddress) {
   const url = `https://api.rugcheck.xyz/v1/tokens/${tokenAddress}/report`;
   try {
+    console.log("trigered")
     const response = await robustFetch(url);
     if (!response.ok) throw new Error(`RugCheck API error: ${response.status}`);
     const report = await response.json();
-    console.log(report.rugged)
-    if (report.rugged) return false;
+    if (report?.rugged) return false;
     return tokenAddress;
   } catch (err) {
-    io.emit('notification', { message: `⚠️ Error verifying token ${tokenAddress}: ${err.message} ` });
-    console.log("error verifying rug " + err)
+    io.emit('notification', { message: `⚠️ Error verifying token ${tokenAddress}: ${err.message}` });
+    console.error('Error verifying rug:', err);
     return false;
   }
 }
@@ -83,9 +79,13 @@ async function verifyWithRugcheck(tokenAddress) {
 async function robustFetch(url, options = {}) {
   return pRetry(
     async () => {
-      const res = await fetch(url, options);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res;
+      try {
+        const res = await fetch(url, options);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res;
+      } catch (err) {
+        throw new Error(`Network error: ${err.message}`);
+      }
     },
     { retries: 3, minTimeout: 1000, factor: 2 },
   );
@@ -94,23 +94,23 @@ async function robustFetch(url, options = {}) {
 function potentialAddresses(tokens) {
   tokens.forEach((token) => processedTokens.add(token.baseToken.address));
   return tokens
-    .filter((token) => {
+    .filter((token) => { 
       const fdv = token.fdv || 0;
       const liquidity = token.liquidity?.usd || 0;
-      const age = token.pairCreatedAt 
-        ? (Date.now() - new Date(token.pairCreatedAt).getTime()) / (1000 * 60 * 60) 
+      const age = token.pairCreatedAt
+        ? (Date.now() - new Date(token.pairCreatedAt).getTime()) / (1000 * 60 * 60)
         : Infinity; // Prevent errors if pairCreatedAt is missing
       const txns = (token.txns?.h1?.buys || 0) + (token.txns?.h1?.sells || 0);
       const volume24H = token.volume?.h24?.usd || 0;
       const txns24H = (token.txns?.h24?.buys || 0) + (token.txns?.h24?.sells || 0);
 
       if (age <= 48) {
-        return fdv >= 100000 && liquidity >= 10000 && txns >= 50;
+        return fdv >= thresholds.fdv1 && liquidity >= thresholds.liquidity1 && txns >= thresholds.txns;
       }
 
-      return fdv >= 500000 && liquidity >= 75000 && volume24H >= 1000000 && txns24H >= 50;
+      return fdv >= thresholds.fdv2 && liquidity >= thresholds.liquidity2 && volume24H >= thresholds.volume24H && txns24H >= thresholds.txns24H;
   })
-    .map((token) => token.baseToken?.address || []); // Default to empty string if address is missing
+    .map((token) => token.baseToken?.address || ""); // Default to empty string if address is missing
 }
 
 async function fetchTokenData() {
@@ -122,15 +122,15 @@ async function fetchTokenData() {
       .filter((token) => token.chainId.toLowerCase() === 'solana')
       .map((token) => token.tokenAddress)
       .join(',');
-    if (!solanaTokens) return [];
+    if (!solanaTokens.length) return [];
     const tokenResponse = await robustFetch(`${config.DEXSCREENER_API_SOL}${solanaTokens}`);
     if (!tokenResponse.ok) throw new Error(`DEXSCREENER_API_SOL error: ${tokenResponse.status}`);
     const solanaData = await tokenResponse.json();
     const newTokens = solanaData.filter((token) => !processedTokens.has(token.baseToken.address));
     return potentialAddresses(newTokens);
   } catch (err) {
-    io.emit('notification', { message: `🚨 Error fetching token data: ${err.message} ` });
-    console.log("error fetching token data" + err)
+    io.emit('notification', { message: `🚨 Error fetching token data: ${err.message}` });
+    console.error('Error fetching token data:', err);
     return [];
   }
 }
@@ -141,7 +141,6 @@ async function verifyTokens(tokens) {
     const result = await verifyWithRugcheck(token);
     if (result) {
       verifiedTokens.push(result);
-      io.emit('notification', { message: result });
     }
   }
   return verifiedTokens;
@@ -151,16 +150,19 @@ io.on('connection', (socket) => {
   console.log('Client connected');
   socket.on('disconnect', () => console.log('Client disconnected'));
   if (latestAnalysis) socket.emit('analysisUpdate', latestAnalysis);
-});
-// tradeEmitter.on('tradeUpdate', (trade) => io.emit('notification', trade));
+}); 
+
+// tradeEmitter.on('tradeUpdate', (trade) => io.emit('notification', trade)); 
 
 async function runAnalyzer() {
+  console.log("Analyzing");
   io.emit('notification', { message: '📊 Analyzing market data...' });
   const tokens = await fetchTokenData();
   io.emit('notification', { message: `📈 Fetched ${tokens.length} tokens from Dexscreener.` });
   const verifiedTokens = await verifyTokens(tokens);
-  io.emit('notification', { message: `✅ Verified tokens: ${verifiedTokens.length}` });
-
+  io.emit('notification', { message: verifiedTokens});
+  console.log('verifiedTokens')
+  console.log(verifiedTokens);
   latestAnalysis = {
     timestamp: new Date().toISOString(),
     totalTokensFetched: tokens.length,
@@ -174,16 +176,12 @@ async function runAnalyzer() {
     for (const token of verifiedTokens) {
       if (executedTrades >= thresholds.maxTrade || failedTrades >= 3) break;
       try {
-        // await executeTrade({
-          // outputMint: token,
-          // amount: thresholds.tradeAmount,
-          // nextTradeThreshold: thresholds.tradeThreshold,
-        // });
-       // executedTrades++;
-        io.emit('notification', { message: `🚀 Trade executed for ${token} successfully! ` });
+        // await executeTrade({ ... });
+        executedTrades++;
+        io.emit('notification', { message: `🚀 Trade executed for ${token} successfully!` });
       } catch (err) {
         failedTrades++;
-        io.emit('notification', { message: `❌ Trade failed for ${token}: ${err.message} ` });
+        io.emit('notification', { message: `❌ Trade failed for ${token}: ${err.message}` });
       }
     }
     if (failedTrades >= 3) {
@@ -202,6 +200,6 @@ async function startAnalyzerLoop() {
     await new Promise((resolve) => setTimeout(resolve, delay));
   }
 }
-startAnalyzerLoop();
 
+startAnalyzerLoop();
 server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
