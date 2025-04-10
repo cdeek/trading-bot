@@ -100,9 +100,11 @@ document.getElementById('thresholdForm').addEventListener('submit', async (e) =>
 
         if (!res.ok) throw new Error('Network response was not ok');
         const updatedThresholds = await res.json();
+        alert('updated')
         console.log('Thresholds updated:', updatedThresholds);
     } catch (error) {
         console.error('Error updating thresholds:', error);
+        alert('Error updating thresholds');
     }
 });
 

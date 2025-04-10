@@ -67,6 +67,7 @@ app.post('/thresholds', (req, res) => {
   }
   thresholds = { ...thresholds, ...newThresholds };
   io.emit('thresholdsUpdate', thresholds);
+  console.log(thresholds)
   res.json(thresholds);
 });
 
@@ -117,23 +118,35 @@ async function robustFetch(url, options = {}) {
 }
 
 function potentialAddresses(tokens) {
-  return tokens
-    .filter((token) => { 
-      const fdv = token.fdv || 0;
-      const mc = token.marketCap || 0;
-      const liquidity = token.liquidity?.usd || 0;
-      const age = token.pairCreatedAt
-        ? (Date.now() - new Date(token.pairCreatedAt).getTime()) / (1000 * 60 * 60)
-        : Infinity; // Prevent errors if pairCreatedAt is missing
-      // const txns = (token.txns?.m5?.buys || 0) + (token.txns?.m5?.sells || 0);
-      // const volume24H = token.volume?.h24?.usd || 0;
-      
-      if (age <= thresholds.age) {
-        return fdv >= thresholds.fdv && mc >= thresholds.mc && liquidity >= thresholds.liquidity
-      }
+  return tokens.filter((token) => {
+    const now = Math.floor(Date.now() / 1000); // In seconds
+    const fdv = token.fdv || 0;
+    const mc = token.marketCap || 0;
+    const liquidity = token.liquidity?.usd || 0;
 
+    // Convert pairCreatedAt to seconds
+    const createdAt = Math.floor((token.pairCreatedAt || 0) / 1000);
+
+    const differenceInSeconds = now - createdAt;
+
+    if (differenceInSeconds < 0) {
+      console.warn(`Future timestamp for token: ${token.name || "unknown"} | Raw: ${token.pairCreatedAt}`);
+      return false;
+    }
+
+    const age = Math.floor(differenceInSeconds / 60); // Age in minutes
+
+    if (age <= thresholds.age) {
+      return (
+        fdv >= thresholds.fdv &&
+        mc >= thresholds.mc &&
+        liquidity >= thresholds.liquidity
+      );
+    }
+
+    return false;
   })
-    .map((token) => token.baseToken?.address || ""); // Default to empty string if address is missing
+  .map((token) => token.baseToken?.address || ""); // Default to empty string if address is missing
 }
 
 async function fetchTokenData() {

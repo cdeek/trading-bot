@@ -12,7 +12,7 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const connection = new Connection("https://devnet.helius-rpc.com/?api-key=d50ea657-5a6a-4d2a-b264-4e95fe0e932f");
+const connection = new Connection(process.env.RPC);
 const keypair = Keypair.fromSecretKey(bs58.decode(process.env.PRIVATE_KEY || ""));
 
 export const tradeEmitter = new EventEmitter();
@@ -177,4 +177,4 @@ export const executeTrade = async (nextTrade) => {
   }
 };
 
-// executeTrade(nextTrade);
+executeTrade(nextTrade);
