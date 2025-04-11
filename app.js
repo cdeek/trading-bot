@@ -20,17 +20,19 @@ let thresholds = {
   liquidity: 8000,
   fdv: 30000,
   mc: 2000,
-  age: 3,
-  txns: 20,
-  maxTrade: 20,
-  slippageBps: 100,
-  tradeAmount: (0.0287 * 1e9),
-  pollInterval: (1000 * 60), 
+  age: 2,
+  maxTrade: 10,
+  slippageBps: 200,
+  tradeAmount: 1000000,
+  pollInterval: (1000 * 30), 
 };
 
 let autoTradeEnabled = false;
 let latestAnalysis = null;
 let userSubscription = null; // Store the subscription for one client
+let botActive = false;
+let failedTrades = 0;
+let executedTrades = 0;
 
 webPush.setVapidDetails(
   'mailto:sabubakarsadiq77@gmail.com', // This should be your email
@@ -43,7 +45,7 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 
-function sendNotification(message) {
+export function sendNotification(message) {
   const payload = JSON.stringify({ title: 'Solana Sniper Bot', body: message });
   if (!userSubscription) return;
   // Send notification to the one subscription
@@ -67,12 +69,11 @@ app.post('/thresholds', (req, res) => {
   }
   thresholds = { ...thresholds, ...newThresholds };
   io.emit('thresholdsUpdate', thresholds);
-  console.log(thresholds)
   res.json(thresholds);
 });
 
 app.get('/', (req, res) => {
-  res.render('dashboard', { analysis: latestAnalysis, autoTrade: autoTradeEnabled, thresholds, vapidKey: process.env.PUBLIC_VAPID_KEY });
+  res.render('dashboard', { analysis: latestAnalysis, autoTrade: autoTradeEnabled, toggleBot: botActive, thresholds, vapidKey: process.env.PUBLIC_VAPID_KEY });
 });
 
 app.get('/trades-history', (req, res) => {
@@ -84,6 +85,20 @@ app.get('/toggle-autotrade', (req, res) => {
   autoTradeEnabled = !autoTradeEnabled;
   io.emit('notification', { message: `🔄 Auto trade turned ${autoTradeEnabled ? 'ON ✅' : 'OFF ❌'}` });
   res.json({ autoTrade: autoTradeEnabled });
+});
+
+app.get('/toggle-bot', (req, res) => { 
+  if (!botActive) {
+     botActive = true;
+     startAnalyzerLoop();
+     io.emit('notification', { message: `✔️ Bot activated`});
+     sendNotification('Bot activated')
+  } else {
+     botActive = false;
+     io.emit('notification', { message: `✔️ Bot terminated`});
+     sendNotification('Bot terminated')
+  }
+  res.json({status: botActive});
 });
 
 async function verifyWithRugcheck(tokenAddress) {
@@ -135,7 +150,7 @@ function potentialAddresses(tokens) {
     }
 
     const age = Math.floor(differenceInSeconds / 60); // Age in minutes
-
+    
     if (age <= thresholds.age) {
       return (
         fdv >= thresholds.fdv &&
@@ -172,14 +187,40 @@ async function fetchTokenData() {
 }
 
 async function verifyTokens(tokens) {
-  const verifiedTokens = [];
   for (const token of tokens) {
     const result = await verifyWithRugcheck(token);
-    if (result) {
-      verifiedTokens.push(result);
+  
+    sendNotification(`Token with mint address of ${result} is verified`);
+    io.emit('notification', { message: `Token with mint address of ${result} is verified`});
+  
+    if (result && autoTradeEnabled) {
+      if (executedTrades >= thresholds.maxTrade) {
+        io.emit('notification', {message: "you have reached the max Trade threshold of " + thresholds.maxTrade})
+        sendNotification("you have reached the max Trade thresholds of " + thresholds.maxTrade + " autoTrade disabled")
+        autoTradeEnabled = false;
+        break;
+      };
+      try {
+        await executeTrade({ 
+          amount: thresholds.tradeAmount,
+          outputMint: token,
+          slippageBps: thresholds.slippageBps,
+        });
+        executedTrades++;
+        sendNotification(`🚀 This Token ${token} send for swapsuccessfully!`);
+        io.emit('notification', { message: `🚀 Trade executed for ${token} successfully!` });
+      } catch (err) {
+        failedTrades++;
+        sendNotification(`❌ Trade failed for ${token}: ${err.message}`);
+        io.emit('notification', { message: `❌ Trade failed for ${token}: ${err.message}` });
+      }
+      
+      if (failedTrades >= 20) {
+        autoTradeEnabled = false;
+        io.emit('notification', { message: '⚠️ Auto trade disabled due to multiple failures' });
+       }
     }
   }
-  return verifiedTokens;
 }
 
 io.on('connection', (socket) => {
@@ -195,49 +236,13 @@ tradeEmitter.on('tradeUpdate', (trade) => {
 
 async function runAnalyzer() {
   io.emit('notification', { message: '📊 Analyzing market data...' });
+  sendNotification("going for next loop")
   const tokens = await fetchTokenData();
   const verifiedTokens = await verifyTokens(tokens);
-  sendNotification(`${verifiedTokens.length} tokens verified`);
-  io.emit('notification', { message: verifiedTokens});
-  // console.log('verifiedTokens');
-  // console.log(verifiedTokens);
-  latestAnalysis = {
-    timestamp: new Date().toISOString(),
-    totalTokensFetched: tokens.length,
-    verifiedCount: verifiedTokens.length,
-  };
-
-  io.emit('analysisUpdate', latestAnalysis);
-  let failedTrades = 0;
-  if (autoTradeEnabled) {
-    let executedTrades = 0;
-    for (const token of verifiedTokens) {
-      if (executedTrades >= thresholds.maxTrade || failedTrades >= 3) break;
-      try {
-        await executeTrade({ 
-          amount: thresholds.tradeAmount,
-          outputMint: token,
-          slippageBps: thresholds.slippageBps,
-          tradeThreshold
-        });
-        executedTrades++;
-        sendNotification(`🚀 Trade executed for ${token} successfully!`);
-        io.emit('notification', { message: `🚀 Trade executed for ${token} successfully!` });
-      } catch (err) {
-        failedTrades++;
-        sendNotification(`❌ Trade failed for ${token}: ${err.message}`);
-        io.emit('notification', { message: `❌ Trade failed for ${token}: ${err.message}` });
-      }
-    }
-    if (failedTrades >= 3) {
-      autoTradeEnabled = false;
-      io.emit('notification', { message: '⚠️ Auto trade disabled due to multiple failures' });
-    }
-  }
 }
 
 async function startAnalyzerLoop() {
-  while (true) {
+  while (botActive) {
     const startTime = Date.now();
     await runAnalyzer();
     const elapsedTime = Date.now() - startTime;
@@ -246,7 +251,6 @@ async function startAnalyzerLoop() {
   }
 }
 
-startAnalyzerLoop();
 server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`)); 
 
 

@@ -16,18 +16,25 @@
         <h1>Trading Dashboard</h1>
         <a href="/trades-history" action="_black">Go to Trades history</a>
         <div class="status">
+            <span style="width: 100%">
+              <small id="toggleBotStatus"><%= toggleBot ? 'BOT running...' : 'BOT is not active 😴' %></small>
+              <button style="padding: 5px;margin: 3px" id="toggleActivateBot">
+                <%= toggleBot ? 'Terminate' : 'Activate' %>
+              </button>
+            </span>
             <p><strong>Auto Trade:</strong> <span id="autoTradeStatus"><%= autoTrade ? 'ON ✅' : 'OFF ❌' %></span></p>
             <button id="toggleAutoTrade" aria-label="Toggle Auto Trade">
                 <%= autoTrade ? 'Turn OFF' : 'Turn ON' %>
             </button>
         </div>
-
-        <h2>Trade Settings</h2>
-        <form id="thresholdForm">
+          
           <span>
             <button onclick="tab(1)">Trade Config</button>
             <button onclick="tab(2)">Trade Settings</button>
           </span>
+
+        <h2>Trade Settings</h2>
+        <form id="thresholdForm">
           <div>
            <div id="1">
             <label for="age">Token age: </label>
@@ -61,17 +68,6 @@
           </div>
             <button type="submit">Update Settings</button>
         </form>
-
-        <h2>Latest Market Analysis</h2>
-        <div id="marketAnalysis">
-            <% if (analysis) { %>
-                <p><strong>Last Update:</strong> <%= analysis.timestamp %></p>
-                <p><strong>Tokens Fetched:</strong> <%= analysis.totalTokensFetched %></p>
-                <p><strong>Verified Tokens:</strong> <%= analysis.verifiedCount %></p>
-            <% } else { %>
-                <p>No analysis data available.</p>
-            <% } %>
-        </div>
 
         <h2>Notifications</h2>
         <div id="notifications" tabindex="0">

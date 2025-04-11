@@ -69,6 +69,19 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
+// Activate Bot
+document.getElementById('toggleActivateBot').addEventListener('click', async () => {
+    try {
+        const res = await fetch('/toggle-bot');
+        if (!res.ok) throw new Error('Network response was not ok');
+        const data = await res.json();
+        document.getElementById('toggleBotStatus').textContent = data.status ? 'BOT is running..' : 'BOT is not active 😴';
+        document.getElementById('toggleActivateBot').textContent = data.status ? 'Terminate' : 'Activate';
+    } catch (error) {
+        console.error('Error toggling auto trade:', error);
+    }
+});
+
 // Auto Trade Toggle
 document.getElementById('toggleAutoTrade').addEventListener('click', async () => {
     try {
@@ -125,11 +138,3 @@ socket.on('notification', (message) => {
     }
 });
 
-// Update Market Analysis
-socket.on('analysisUpdate', (analysis) => {
-    document.getElementById('marketAnalysis').innerHTML = `
-        <p><strong>Last Update:</strong> ${analysis.timestamp}</p>
-        <p><strong>Tokens Fetched:</strong> ${analysis.totalTokensFetched}</p>
-        <p><strong>Verified Tokens:</strong> ${analysis.verifiedCount}</p>
-    `;
-});
