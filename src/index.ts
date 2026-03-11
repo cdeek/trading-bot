@@ -1,22 +1,36 @@
 import { momentumStrategy } from "./strategies/momentum.ts";
-import { executeTrade } from "./bots/executor.ts";
 import { createClient } from "./blockchain/solanaClient.ts";
-
+import { startMonitoring } from "./blockchain/eventListener.ts";
+import {initConfig} from "../config/config.ts"
 import logger from "./utils/logger.ts";
+import express from "express";
+import { Telegraf } from "telegraf";
 
-// Example pools (replace with real ones)
-const pools = [
-  "FILL_THIS_WITH_POOL_PUBLIC_KEY_1",
-  "FILL_THIS_WITH_POOL_PUBLIC_KEY_2"
-];
+const app = express();
 
-async function runBot() {
-  await createClient();
-  for (const pool of pools) {
-    await momentumStrategy(pool, 50, 2, executeTrade);
+const abort = {
+  controller: new AbortController()
+};
+
+(async () => {
+  try {
+    await initConfig();
+    await startTelegramBot(app, abort);
+
+    await createClient();
+    await startMonitoring(abort.controller);
+
+    app.post("/helius", (req, res) => {
+      res.status(200);
+    });
+
+    app.listen(3000, () => logger.info("Server listening on port 3000"));
+  } catch (err) {
+    logger.error(err);
   }
-}
 
-setInterval(runBot, 60 * 1000);
-
-logger.info("Momentum trading bot started");
+  process.on("SIGINT", () => {
+    abort.controller.abort();
+    process.exit();
+  });
+})();
