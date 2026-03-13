@@ -1,5 +1,4 @@
 import { createSolanaRpc, address, type Address } from "@solana/kit";
-import { decodeMigration } from "../utils/decoder.ts";
 
 export async function runSnipingStrategy(sig: string): Promise<void> {
   try {

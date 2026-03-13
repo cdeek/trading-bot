@@ -1,12 +1,9 @@
 import {
   getBase64EncodedWireTransaction,
-  signTransactionWithSigners
+  signTransactionMessageWithSigners
 } from "@solana/kit";
-import { client } from "./solanaClient";
-
-const JUP_API_KEY = process.env.JUPITER_API_KEY || "";
-const ULTRA_BASE_URL = "https://api.jup.ag/ultra/v1";
-const SOL_MINT = "So11111111111111111111111111111111111111112";
+import { client } from "./solanaClient.ts";
+import logger from "../utils/logger.ts";
 
 export interface UltraOrderResponse {
   transaction: string;
@@ -17,11 +14,7 @@ export interface UltraOrderResponse {
 /**
  * Core Swap Function (Handles Buy & Sell)
  */
-export async function executeUltraSwap({
-  isSell =false,
-  mint,
-  amount
-}) {
+export async function executeUltraSwap({ isSell = false, mint, amount }) {
   try {
     const params = {
       inputMint: BASE_MINT,
@@ -36,11 +29,11 @@ export async function executeUltraSwap({
     }
 
     // 1. Request the Order
-    const orderRes = await fetch(`${ULTRA_BASE_URL}/order`, {
+    const orderRes = await fetch(`${JUPITER_API}/order`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": JUP_API_KEY
+        "x-api-key": JUPITER_API_KEY
       },
       body: JSON.stringify(params)
     });
@@ -51,16 +44,18 @@ export async function executeUltraSwap({
 
     // 2. Sign the transaction
     const txObject = getBase64EncodedWireTransaction(transaction);
-    const signedTx = await signTransactionWithSigners(txObject, [
+    // const transactionBytes = getBase64Encoder().encode(base64Transaction);
+
+    const signedTx = await signTransactionMessageWithSigners(txObject, [
       client.signer
     ]);
 
     // 3. Execute
-    const execRes = await fetch(`${ULTRA_BASE_URL}/execute`, {
+    const execRes = await fetch(`${JUPITER_API}/execute`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": JUP_API_KEY
+        "x-api-key": JUPITER_API_KEY
       },
       body: JSON.stringify({
         signedTransaction: signedTx.base64EncodedWireTransaction,
@@ -78,30 +73,13 @@ export async function executeUltraSwap({
       requestId
     };
   } catch (error: any) {
-    console.error("Jupiter Ultra Error:", error);
+    logger.error(error, "Jupiter Ultra Error:");
     return { success: false, error: error.message };
   }
 }
 
-/**
- * Utility: Get holdings via Ultra API
- */
-export async function getBotHoldings() {
-  const res = await fetch(
-    `${ULTRA_BASE_URL}/holdings/${client.signer.address}`,
-    {
-      headers: { "x-api-key": JUP_API_KEY }
-    }
-  );
-  return res.json();
-}
-
-/**
- * THE "PANIC BUTTON": Sells all SPL tokens in the wallet back to native SOL.
- * Skips SOL itself to avoid infinite loops or errors.
- */
 export async function sellAllHoldings() {
-  console.log("!!! [Ultra] Initiating SELL ALL sequence !!!");
+  logger.info("!!! [Ultra] Initiating SELL ALL sequence !!!");
 
   try {
     // 1. Get current holdings from Jupiter's internal indexer
@@ -109,26 +87,22 @@ export async function sellAllHoldings() {
 
     // Jupiter Ultra /holdings returns an array like: [{ mint: string, amount: string }, ...]
     const tokensToSell = holdingsRes.filter(
-      (h: any) => h.mint !== SOL_MINT && BigInt(h.amount) > 0n
+      (h: any) => h.mint !== BASE_MINT && BigInt(h.amount) > 0n
     );
 
     if (tokensToSell.length === 0) {
-      console.log("[Ultra] No SPL tokens found to sell.");
+      logger.info("[Ultra] No SPL tokens found to sell.");
       return { success: true, message: "Clean slate" };
     }
 
-    console.log(`[Ultra] Found ${tokensToSell.length} tokens to offload.`);
-
     const results = [];
     for (const token of tokensToSell) {
-      console.log(`[Ultra] Offloading ${token.mint} (Amount: ${token.amount})`);
-
       // We use the executeUltraSwap logic to convert to SOL
-      const result = await executeUltraSwap(
-        token.mint,
-        SOL_MINT,
-        BigInt(token.amount)
-      );
+      const result = await executeUltraSwap({
+        isSell: true,
+        mint: token.mint,
+        amount: BigInt(token.amount)
+      });
 
       results.push({
         mint: token.mint,
@@ -140,30 +114,9 @@ export async function sellAllHoldings() {
       await new Promise(r => setTimeout(r, 250));
     }
 
-    // 2. After selling, clear your local data/trades.json so the bot knows it's empty
-    clearLocalTradeData();
-
     return { success: true, detailedResults: results };
   } catch (error) {
-    console.error("[Ultra] Sell All Critical Failure:", error);
+    logger.error(error, "[Ultra] Sell All Critical Failure:");
     return { success: false, error };
-  }
-}
-
-/**
- * Utility to reset your local data folder after a mass sell
- */
-function clearLocalTradeData() {
-  const filePath = path.join(process.cwd(), "data", "trades.json");
-  if (fs.existsSync(filePath)) {
-    // We archive it rather than delete it, just in case
-    const archivePath = path.join(
-      process.cwd(),
-      "data",
-      `trades_archive_${Date.now()}.json`
-    );
-    fs.renameSync(filePath, archivePath);
-    fs.writeFileSync(filePath, JSON.stringify([]));
-    console.log("[Data] Local trade history archived and reset.");
   }
 }

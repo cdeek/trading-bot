@@ -1,51 +1,68 @@
-import { Helius } from "helius-sdk";
-import { Connection, Keypair, VersionedTransaction } from "@solana/web3.js";
-import axios from "axios";
-import bs58 from "bs58";
-import express from "express";
 
-// --- CONFIGURATION ---
-const HELIUS_KEY = "YOUR_HELIUS_KEY";
-const JUP_API_KEY = "YOUR_JUP_KEY";
-const WEBHOOK_ID = "YOUR_WEBHOOK_ID";
-const WALLET_KEY = Keypair.fromSecretKey(bs58.decode("YOUR_PRIVATE_KEY"));
-
-const helius = new Helius(HELIUS_KEY);
-const app = express();
-app.use(express.json());
+import { executeTrade } from "../bots/executor.ts";
+import logger from "../utils/logger.ts";
 
 // --- STATE MANAGEMENT ---
 interface Trade {
   mint: string;
   entryPrice: number;
-  initialAmount: number;
-  targetsReached: number; // 0: none, 1: 2x (sold 50%), 2: 3x (sold 25%)
+  initialAmount: number; // Raw BigInt format (e.g., total tokens bought)
+  targetsReached: number; // 0: none, 1: 1.1x, 2: 2x, 3: 3x
+  highestPrice: number;
 }
 
-const activeTrades = new Map<string, Trade>(); // Key: Pool Address
+export const activeTrades = new Map<string, Trade>(); // Key: Pool Address
 const poolVelocity = new Map<string, number[]>(); // Key: Pool Address -> Timestamps
 
 // --- MOMENTUM DECAY CALCULATION ---
+/**
+ * MOMENTUM DECAY CALCULATION
+ * Logic: Compares current 5-second activity against a 45-second rolling baseline.
+ * Uses a "Strike" system to prevent panic-selling on a single quiet second.
+ */
+
+let decayStrikes = new Map<string, number>(); // Tracks strikes per pool
+
 function checkDecay(pool: string): boolean {
   const now = Date.now();
   const ts = poolVelocity.get(pool) || [];
-  const recent = ts.filter(t => now - t < 10000); // Last 10 seconds
-  poolVelocity.set(pool, recent);
+  
+  // 1. FILTER: Keep only the last 45 seconds for a responsive baseline
+  const baselineWindow = ts.filter(t => now - t < 45000); 
+  poolVelocity.set(pool, baselineWindow);
 
-  if (ts.length < 20) return false; // Wait for data baseline
+  // 2. BASELINE: Minimum data requirement (don't sell if there's no volume yet)
+  if (baselineWindow.length < 15) return false;
 
-  const avg5s = (ts.filter(t => now - t < 60000).length / 60) * 5;
-  const current5s = recent.filter(t => now - t < 5000).length;
+  // 3. MATH: Calculate expected activity vs actual activity
+  // avg5s = (Total trades in 45s / 45) * 5
+  const avg5s = (baselineWindow.length / 45) * 5;
+  const current5s = baselineWindow.filter(t => now - t < 5000).length;
 
   const decay = current5s / avg5s;
-  console.log(`📊 Velocity Decay: ${(decay * 100).toFixed(0)}% activity`);
-  return decay < 0.4; // Exit if activity drops below 40% of peak
+  const strikes = decayStrikes.get(pool) || 0;
+
+  // 4. LOGIC: 35% Threshold with a 2-strike safety buffer
+  if (decay < 0.35) {
+    const newStrikes = strikes + 1;
+    decayStrikes.set(pool, newStrikes);
+    
+    console.warn(`[VELOCITY] Low activity detected: ${(decay * 100).toFixed(0)}% (Strike ${newStrikes}/2)`);
+    
+    if (newStrikes >= 2) {
+      decayStrikes.delete(pool); // Reset for next time
+      return true; // TRIGGER SELL
+    }
+  } else {
+    // Reset strikes if volume recovers above the threshold
+    if (strikes > 0) decayStrikes.set(pool, 0);
+  }
+
+  return false; // HOLD
 }
 
-// --- WEBHOOK HANDLER (THE BRAIN) ---
-app.post("/helius-webhook", async (req, res) => {
-  const events = req.body;
-
+// --- WEBHOOK HANDLER ---
+export const handleMomentum = async (events: any) => {
   for (const event of events) {
     const pool =
       event.events.swap?.liquidityPool || event.events.liquidity?.pool;
@@ -53,45 +70,71 @@ app.post("/helius-webhook", async (req, res) => {
 
     const trade = activeTrades.get(pool)!;
 
-    // 1. RUG DETECTION (Emergency Exit)
+    // 1. EMERGENCY RUG DETECTION
     if (event.type === "LIQUIDITY_REMOVAL") {
-      console.error("🚨 RUG DETECTED! DUMPING EVERYTHING...");
-      await executeUltraSell(trade.mint, "all", true);
-      cleanup(pool);
+      logger.error("🚨 RUG DETECTED! DUMPING EVERYTHING...");
+      await executeTrade({ mint: trade.mint, amount: "all", isSell: true });
+      await cleanup(pool);
       continue;
     }
 
-    // 2. X-TARGET LOGIC (Take Profit)
-    const currentPrice = event.events.swap.price;
+    // 2. SCALING TAKE PROFIT (10% MOONBAG STRATEGY)
+    const currentPrice = event.events.swap?.price;
+    if (!currentPrice) continue;
+
+    if (currentPrice > trade.highestPrice) {
+      trade.highestPrice = currentPrice;
+    }
+
+    const dropFromPeak =
+      (trade.highestPrice - currentPrice) / trade.highestPrice;
+
+    // TRAILING STOP: If price drops 15% from its highest point, exit.
+    if (dropFromPeak >= 0.15 && trade.targetsReached >= 1) {
+      logger.warn(`📉 Trailing Stop Triggered: -15% from peak. Exiting.`);
+      await executeUltraSell({ mint: trade.mint, amount: "all" });
+      await cleanup(pool);
+      continue;
+    }
+
     const profitX = currentPrice / trade.entryPrice;
 
-    if (profitX >= 2.0 && trade.targetsReached < 1) {
-      console.log("💰 2X Hit! Scaling out 50%...");
-      const halfAmount = Math.floor(trade.initialAmount * 0.5).toString();
-      await executeUltraSell(trade.mint, halfAmount);
+    // Thresholds: 1.1x (Break-even), 2.0x (Double), 3.0x (Triple)
+    if (profitX >= 1.1 && trade.targetsReached < 1) {
+      logger.info("💰 Target 1: Selling 20% (Initial De-risk)");
+      const amount = Math.floor(trade.initialAmount * 0.2).toString();
+      await executeTrade({ mint: trade.mint, amount, isSell: true });
       trade.targetsReached = 1;
+    } else if (profitX >= 2.0 && trade.targetsReached < 2) {
+      logger.info("🚀 Target 2: Selling 30% (Securing Gains)");
+      const amount = Math.floor(trade.initialAmount * 0.3).toString();
+      await executeTrade({ mint: trade.mint, amount, isSell: true });
+      trade.targetsReached = 2;
+    } else if (profitX >= 3.0 && trade.targetsReached < 3) {
+      logger.info("🌕 Target 3: Selling 40% (Secured 90% Total)");
+      const amount = Math.floor(trade.initialAmount * 0.4).toString();
+      await executeTrade({ mint: trade.mint, amount, isSell: true });
+      trade.targetsReached = 3;
     }
 
     // 3. MOMENTUM DECAY LOGIC (Trailing Stop)
-    poolVelocity.get(pool)?.push(Date.now());
+    const history = poolVelocity.get(pool) || [];
+    history.push(Date.now());
+    poolVelocity.set(pool, history);
+
     if (checkDecay(pool)) {
-      console.log("⚠️ Momentum dying. Closing position.");
-      await executeUltraSell(trade.mint, "all");
-      cleanup(pool);
+      logger.warn("⚠️ Momentum dead. Closing remaining position.");
+      await executeTrade({ mint: trade.mint, amount: "all", isSell: true });
+      await cleanup(pool);
     }
   }
-  res.sendStatus(200);
-});
+};
 
 // --- UTILS ---
 async function cleanup(pool: string) {
   activeTrades.delete(pool);
   poolVelocity.delete(pool);
-  // Optimization: Batch this with other removals to save 100-credit fee
-  const webhook = await helius.getWebhookByID(WEBHOOK_ID);
-  await helius.editWebhook(WEBHOOK_ID, {
-    accountAddresses: webhook.accountAddresses.filter(a => a !== pool)
-  });
+  // Optional: Add logic here to remove the address from your Helius Webhook
+  // to save on credit costs (100 credits per edit).
+  logger.info(`🧹 Cleaned up state for pool: ${pool}`);
 }
-
-app.listen(3000, () => console.log("🤖 Bot Listening on Port 3000"));

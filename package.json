@@ -5,8 +5,9 @@
   "license": "ISC",
   "author": "",
   "type": "module",
-  "main": "index.js",
   "scripts": {
+    "start": "node src/index.ts",
+    "dev": "node src/index.ts | npx pino-pretty",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {

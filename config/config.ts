@@ -1,8 +1,6 @@
-import dotenv from "dotenv";
-import fs from "fs";
+import { promises as fs } from "fs";
 import path from "path";
-
-dotenv.config();
+import logger from "../src/utils/logger.ts";
 
 const CONFIG_PATH = path.resolve("config", "strategies.json");
 export let config = {};
@@ -28,24 +26,18 @@ export async function saveConfig() {
   }
 }
 
-export const BOT_URL = process.env.BOT_URL;
-export const COLD_WALLET = process.env.COLD_WALLET;
-
-export const RPC_URL = process.env.RPC_URL;
-export const PRIVATE_KEY = process.env.PRIVATE_KEY;
-
-export const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-export const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-export const TELEGRAM_GROUP_ID = process.env.TELEGRAM_GROUP_ID;
-
+export const BASE_MINT = "So11111111111111111111111111111111111111112";
 export const TARGETS = [
   {
     name: "PumpFun",
-    addr: address("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P")
+    addr: "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
   },
   {
     name: "Raydium",
-    addr: address("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8")
+    addr: "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
   },
-  { name: "Whale1", addr: address("7815q...p9W") } // Add your whale here
+  {
+    name: "Raydium",
+    addr: "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
+  }
 ];

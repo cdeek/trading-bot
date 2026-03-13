@@ -1,85 +1,123 @@
 import {
   isSolanaError,
+  address,
   SOLANA_ERROR__RPC_SUBSCRIPTIONS__CHANNEL_CONNECTION_CLOSED
 } from "@solana/kit";
 
 import { runSnipingStrategy } from "../strategies/sniping.ts";
-import { runWhaleStrategy } from "../strategies/walletTracking.ts"; // Fixed import
+import { runWhaleStrategy } from "../strategies/walletTracking.ts";
 import logger from "../utils/logger.ts";
+import {decodeUnifiedEvent} from "../utils/decoder.ts";
 import { TARGETS } from "../../config/config.ts";
 import { client } from "./solanaClient.ts";
 
-async function startMonitoring() {
+export async function startMonitoring() {
   const controller = new AbortController();
 
   try {
-    // We iterate through TARGETS.
-    // WARNING: Helius Free Tier has a limit of 5 concurrent WSS connections.
     for (const target of TARGETS) {
       const sub = await client.rpcSubscriptions
         .logsNotifications(
-          { mentions: [target.addr] }, // target.addr should be the Program ID or Wallet
+          { mentions: [address(target.addr)] },
           { commitment: "processed" }
         )
         .subscribe({ abortSignal: controller.signal });
 
       logger.info(`📡 Monitoring ${target.name} via Helius WSS`);
 
-      // Using a dedicated listener per subscription
-      (async () => {
-        try {
-          for await (const notification of sub) {
-            if (notification.value.err) continue;
-
-            const sig = notification.value.signature;
-            const logs = notification.value.logs;
-
-            handleTransaction(sig, logs, target.name);
-          }
-        } catch (err) {
-          handleWssError(err);
-        }
-      })();
+      listenSubscription(sub, target.name);
     }
   } catch (err) {
     handleWssError(err);
   }
 }
 
-function handleTransaction(sig: string, logs: string[], target: string) {
-  // 2026 Pattern Matching
-  const logString = logs.join(" ");
+async function listenSubscription(sub: AsyncIterable<any>, target: string) {
+  try {
+    for await (const notification of sub) {
+      const { err, signature, logs } = notification.value;
+
+      if (err) continue;
+
+      processLogs(signature, logs, target);
+    }
+  } catch (err) {
+    handleWssError(err);
+  }
+}
+
+export async function processLogs(logs, sig, target) {
+  let decodedEvent = null;
+
+  let isTargetAction = false;
+  let actionLabel = "";
 
   switch (target) {
     case "PumpFun":
-      // 2026 Migration Logic: Pump.fun -> PumpSwap
-      if (logString.includes("Instruction: Migrate")) {
-        logger.info(`✨ PumpSwap Migration Detected: ${sig}`);
-        runSnipingStrategy(sig, "PUMPSWAP_GRAD");
+      for (const log of logs) {
+        if (
+          log.includes("Instruction: Migrate") &&
+          !log.includes("Instruction: MigrateB")
+        ) {
+          actionLabel = "PUMPSWAP_MIGRATION";
+          isTargetAction = true;
+          break;
+        }
       }
       break;
 
     case "Raydium":
-      // CPMM is the standard in 2026, replacing AMM v4
-      if (
-        logString.includes("initialize2") ||
-        logString.includes("CreatePool")
-      ) {
-        logger.info(`🌊 Raydium CPMM Pool Created: ${sig}`);
-        runSnipingStrategy(sig, "RAYDIUM_CPMM_GRAD");
+      for (const log of logs) {
+        if (
+          log.includes("Instruction: CreatePool") ||
+          log.includes("Instruction: initialize2") ||
+          log.includes("Instruction: initialize")
+        ) {
+          actionLabel = "RAYDIUM_POOL_CREATED";
+          isTargetAction = true;
+          break;
+        }
       }
       break;
 
     case "Whale1":
-      // Monitoring specific whale movements or Jupiter swaps
-      if (/Create|Swap|Jupiter|Route/i.test(logString)) {
-        logger.info(`🐋 Whale Move Detected: ${sig}`);
-        runWhaleStrategy(sig, "WHALE_MOVE");
+      for (const log of logs) {
+        if (
+          log.includes("Instruction: Swap") ||
+          log.includes("Jupiter") ||
+          log.includes("Route") ||
+          log.includes("Create")
+        ) {
+          actionLabel = "WHALE_MOVE";
+          isTargetAction = true;
+          break;
+        }
       }
       break;
   }
-}
 
+  if (isTargetAction) {
+    for (const log of logs) {
+      if (log.includes("Program data: ") || log.includes("ray_log: ")) {
+        decodedEvent = decodeUnifiedEvent(log);
+
+        if (decodedEvent) {
+          logger.info(
+            `🔥 [${actionLabel}] Detected! | Platform: ${decodedEvent.platform} | Sig: ${sig}`
+          );
+
+          // Execute your specific strategy based on target
+          if (target === "Whale") {
+            runWhaleStrategy(sig, "WHALE", decodedEvent);
+          } else {
+            runSnipingStrategy(sig, target, decodedEvent);
+          }
+          return; // Exit after first successful decode for this signature
+        }
+      }
+    }
+  }
+}
 function handleWssError(err: unknown) {
   if (
     isSolanaError(
@@ -89,7 +127,8 @@ function handleWssError(err: unknown) {
   ) {
     logger.warn("🔄 Helius WSS closed. Reconnecting in 2s...");
   } else {
-    logger.error("❌ Unexpected WSS Error:", err);
+    logger.error(err, "❌ Unexpected WSS Error:");
   }
+
   setTimeout(() => startMonitoring(), 2000);
 }

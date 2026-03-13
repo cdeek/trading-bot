@@ -10,19 +10,14 @@ export let client: any | undefined;
 
 export async function createClient(): Promise<any> {
   if (!client) {
-    const secretKeyString = process.env.BOT_SECRET_KEY;
-    if (!secretKeyString) {
-      throw new Error("BOT_SECRET_KEY is not defined in environment variables");
-    }
-
-    const secretKeyBytes = getBase58Encoder().encode(secretKeyString);
+    const secretKeyBytes = getBase58Encoder().encode(process.env.PRIVATE_KEY);
 
     const signer = await createKeyPairSignerFromBytes(secretKeyBytes);
 
     client = {
-      rpc: createSolanaRpc(process.env.RPC_URL || "http://127.0.0.1:8899"),
+      rpc: createSolanaRpc(process.env.RPC_URL),
       rpcSubscriptions: createSolanaRpcSubscriptions(
-        process.env.WSS_URL || "ws://127.0.0.1:8900"
+        process.env.WSS_URL
       ),
       signer: signer
     };

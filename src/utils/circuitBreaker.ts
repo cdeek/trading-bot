@@ -1,4 +1,5 @@
 import logger from "./logger.ts";
+import { sendNotification } from "../bots/telegram.ts";
 
 export class CircuitBreaker {
   private failures = 0;
@@ -19,6 +20,9 @@ export class CircuitBreaker {
     if (this.failures >= this.maxFailures) {
       this.isTripped = true;
       logger.error(
+        "!!! CIRCUIT BREAKER TRIPPED: Bot Halted to protect SOL balance !!!"
+      );
+      sendNotification(
         "!!! CIRCUIT BREAKER TRIPPED: Bot Halted to protect SOL balance !!!"
       );
     }

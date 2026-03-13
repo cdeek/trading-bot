@@ -1,14 +1,12 @@
 {
   "global": {
-    "isPaused": false,
-    // sol
     "minCapital": 0.001,
-    "sweepThreshold": 0.005,
+    "sweepThreshold": 0.005
   },
   "strategies": {
     "SNIPER": {
       "label": "🎯 Sniper Mode",
-      "minLiquidity": 5.0,
+      "minLiquidity": 6,
       "maxTax": 10,
       "minHolders": 50,
       "autoBuyAmount": 0.1,
@@ -17,41 +15,22 @@
     },
     "MOMENTUM_SELL": {
       "label": "📈 Momentum Scalp",
-      "profitTarget": 15.0,
-      "stopLoss": 5.0,
-      "trailingStop": 2.0,
+      "profitTarget": 15,
+      "stopLoss": 5,
+      "trailingStop": 2,
       "volumeSpikeThreshold": 2.5,
-      "rsiOverbought": 75,
-      "checkIntervalMs": 5000,
-      "targets": [{
-        "multiple": 1.0,
-        "sellPercent": 50,
-        "status": "PENDING",
-        "label": "1x (Initial Out)"
-      },
-        {
-          "multiple": 2.0,
-          "sellPercent": 25,
-          "status": "PENDING",
-          "label": "2x (Profit)"
-        },
-        {
-          "multiple": 3.0,
-          "sellPercent": 25,
-          "status": "PENDING",
-          "label": "3x (Moonbag)"
-        }]
+      "rsiOverbought": 75
     },
     "WHALE_TRACKER": {
       "label": "🐋 Whale Tracker",
-      "minTransactionSize": 50.0,
+      "minTransactionSize": 50,
       "trackList": [
         "address1",
         "address2"
       ],
       "copyTrade": false,
       "alertOnly": true,
-      "minSolBalance": 100.0
+      "minSolBalance": 100
     }
   }
 }

@@ -1,5 +1,4 @@
 import { client } from "./solanaClient";
-import { config, COLD_WALLET } from "../../config/config.ts";
 import {
   pipe,
   createTransactionMessage,
@@ -11,7 +10,9 @@ import {
   address
 } from "@solana/kit";
 import { getTransferSolInstruction } from "@solana-program/system";
+
 import logger from "../utils/logger.ts";
+import { config, COLD_WALLET } from "../../config/config.ts";
 
 /**
  * Checks balance and moves excess SOL to a cold wallet.
@@ -34,16 +35,17 @@ export async function autoSweepProfits() {
         )} SOL. Initiating sweep...`
       );
 
-      // Leave a tiny bit extra for future gas fees
-      const sweepAmount = excess - 0.01;
-
-      const signature = await transferSol(COLD_WALLET, sweepAmount);
+      const signature = await transferSol(COLD_WALLET, excess);
       logger.info(
-        `[Accountant] Sweep Successful! ${sweepAmount} SOL sent to Cold Wallet.`
+        `[Accountant] Sweep Successful! ${excess} SOL sent to Cold Wallet.`
       );
-      logger.info(`[Accountant] TX: https://solscan.io/tx/${signature}`);
 
-      return { swept: true, amount: sweepAmount, signature };
+      await sendNotification(
+        `[Accountant] Profit detected: ${excess.toFixed(
+          4
+        )} SOL.\n Initiating sweep...\n Done!`
+      );
+      return { swept: true, amount: excess, signature };
     } else {
       logger.info(`[Accountant] Balance below threshold. No sweep needed.`);
       return { swept: false };
@@ -55,39 +57,34 @@ export async function autoSweepProfits() {
 }
 
 async function transferSol(toAddress: string, solAmount: number) {
-  try {
-    // 1. Get the latest blockhash
-    const { value: latestBlockhash } = await client.rpc
-      .getLatestBlockhash()
-      .send();
+  // 1. Get the latest blockhash
+  const { value: latestBlockhash } = await client.rpc
+    .getLatestBlockhash()
+    .send();
 
-    // 2. Convert SOL to lamports
-    const amount = lamports(BigInt(Math.floor(solAmount * 1_000_000_000)));
+  // 2. Convert SOL to lamports
+  const amount = lamports(BigInt(Math.floor(solAmount * 1_000_000_000)));
 
-    // 3. Create the Transfer Instruction
-    const instruction = getTransferSolInstruction({
-      source: client.signer,
-      destination: address(toAddress),
-      amount
-    });
+  // 3. Create the Transfer Instruction
+  const instruction = getTransferSolInstruction({
+    source: client.signer,
+    destination: address(toAddress),
+    amount
+  });
 
-    // 4. Build the Transaction Message
-    const message = pipe(
-      createTransactionMessage({ version: 0 }),
-      m => setTransactionMessageFeePayerSigner(client.signer, m),
-      m => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, m),
-      m => appendTransactionMessageInstruction(instruction, m)
-    );
+  // 4. Build the Transaction Message
+  const message = pipe(
+    createTransactionMessage({ version: 0 }),
+    m => setTransactionMessageFeePayerSigner(client.signer, m),
+    m => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, m),
+    m => appendTransactionMessageInstruction(instruction, m)
+  );
 
-    // 5. Sign and Send
-    const signedTx = await signTransactionMessageWithSigners(message);
-    const signature = await client.rpc
-      .sendTransaction(signedTx, { encoding: "base64" })
-      .send();
+  // 5. Sign and Send
+  const signedTx = await signTransactionMessageWithSigners(message);
+  const signature = await client.rpc
+    .sendTransaction(signedTx, { encoding: "base64" })
+    .send();
 
-    return { success: true, signature };
-  } catch (error: any) {
-    logger.error(error, "[Transfer] SOL Transfer Failed:");
-    return { success: false, error: error.message };
-  }
+  return signature;
 }

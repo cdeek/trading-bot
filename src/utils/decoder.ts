@@ -1,86 +1,113 @@
-import { address } from "@solana/kit";
-import { client } from "../blockchain/solanaClient.ts";
-import logger from "./logger.ts";
+import {
+  getBase64Decoder,
+  getStructDecoder,
+  getU64Decoder,
+  getU8Decoder,
+  getBooleanDecoder,
+  getAddressDecoder
+} from "@solana/kit";
 
-export async function decodeMigration(signature: string) {
+const b64 = getBase64Decoder();
+
+// --- DECORDER SCHEMAS ---
+
+// Pump.fun Trade (81 bytes after discriminator)
+const pumpTradeDecoder = getStructDecoder([
+  ["mint", getAddressDecoder()],
+  ["solAmount", getU64Decoder()],
+  ["tokenAmount", getU64Decoder()],
+  ["isBuy", getBooleanDecoder()],
+  ["user", getAddressDecoder()],
+  ["timestamp", getU64Decoder()],
+  ["vSolReserves", getU64Decoder()],
+  ["vTokenReserves", getU64Decoder()]
+]);
+
+// Raydium V4 (Legacy - No discriminator, starts with type byte)
+const rayV4SwapDecoder = getStructDecoder([
+  ["type", getU8Decoder()],
+  ["amountIn", getU64Decoder()],
+  ["minOut", getU64Decoder()],
+  ["direction", getU64Decoder()],
+  ["userSource", getAddressDecoder()],
+  ["poolCoin", getU64Decoder()],
+  ["poolPc", getU64Decoder()],
+  ["amountOut", getU64Decoder()]
+]);
+
+// Raydium CPMM / PumpSwap (Modern Anchor - 80 bytes after discriminator)
+const cpmmEventDecoder = getStructDecoder([
+  ["poolId", getAddressDecoder()],
+  ["inputAmount", getU64Decoder()],
+  ["outputAmount", getU64Decoder()],
+  ["inputMint", getAddressDecoder()],
+  ["outputMint", getAddressDecoder()]
+]);
+
+// --- THE UNIFIED FUNCTION ---
+
+export function decodeUnifiedEvent(logLine) {
   try {
-    // Fetch the transaction with the highest version support (v0)
-    const tx = await client.rpc
-      .getTransaction(signature, {
-        maxSupportedTransactionVersion: 0,
-        commitment: "confirmed"
-      })
-      .send();
+    // 1. HANDLE RAYDIUM V4 (ray_log)
+    if (logLine.includes("ray_log: ")) {
+      const bytes = b64.decode(logLine.split("ray_log: ")[1]);
+      const disc = bytes[0];
 
-    if (!tx || !tx.meta) return null;
-
-    const { postTokenBalances, preTokenBalances } = tx.meta;
-
-    // 1. Extract the Mint Address
-    // In a graduation, the Mint is the token whose balance changes significantly
-    // and usually has a "pump" suffix or is the newly created account.
-    const mint = postTokenBalances?.find(
-      b =>
-        !preTokenBalances?.some(pb => pb.mint === b.mint) ||
-        b.mint.toString().endsWith("pump")
-    )?.mint;
-
-    // 2. Extract the New Pool Address
-    // The Pool is typically the account that receives the SOL liquidity (85-100 SOL)
-    const poolAccount = tx.transaction.message.staticAccounts.find(
-      (acc, idx) => {
-        const pre = tx.meta?.preBalances[idx] || 0n;
-        const post = tx.meta?.postBalances[idx] || 0n;
-        return post - pre >= 80_000_000_000n; // ~80 SOL threshold
+      console.log("ray", bytes);
+      if (disc === 3 || disc === 4) {
+        const raw = rayV4SwapDecoder.decode(bytes);
+        const isSolIn = raw.direction.toString() === "1";
+        return {
+          platform: "Raydium_V4",
+          type: "swap",
+          mint: raw.userSource, // Note: V4 logs require context to map userSource back to Mint
+          solAmount: isSolIn ? raw.amountIn : raw.amountOut,
+          tokenAmount: isSolIn ? raw.amountOut : raw.amountIn,
+          solReserves: raw.poolCoin,
+          tokenReserves: raw.poolPc,
+          isBuy: isSolIn
+        };
       }
-    );
+    }
 
-    logger.info(`✅ Decoded : Mint: ${mint} | Pool: ${poolAccount}`);
+    // 2. HANDLE ANCHOR PROGRAMS (Pump.fun, CPMM, PumpSwap)
+    if (logLine.includes("Program data: ")) {
+      const bytes = b64.decode(logLine.split("Program data: ")[1]);
+      const body = bytes.slice(8); // Remove 8-byte discriminator
 
-    return {
-      mint: mint ? address(mint) : null,
-      pool: poolAccount ? address(poolAccount) : null
-    };
-  } catch (err) {
-    logger.error("❌ Decoding Error:", err);
+      console.log("data", bytes);
+      // Route by Byte Length
+      if (body.length === 81) {
+        const raw = pumpTradeDecoder.decode(body);
+        return {
+          platform: "PumpFun",
+          type: "trade",
+          mint: raw.mint,
+          solAmount: raw.solAmount,
+          tokenAmount: raw.tokenAmount,
+          solReserves: raw.vSolReserves,
+          tokenReserves: raw.vTokenReserves,
+          isBuy: raw.isBuy
+        };
+      }
+
+      if (body.length === 80) {
+        const raw = cpmmEventDecoder.decode(body);
+        const isBuy = raw.inputMint.toString().startsWith("So111"); // Check if input is WSOL
+        return {
+          platform: "Raydium_CPMM",
+          type: "swap",
+          mint: isBuy ? raw.outputMint : raw.inputMint,
+          solAmount: isBuy ? raw.inputAmount : raw.outputAmount,
+          tokenAmount: isBuy ? raw.outputAmount : raw.inputAmount,
+          solReserves: 0n, // CPMM logs do not include new reserves
+          tokenReserves: 0n,
+          isBuy: isBuy
+        };
+      }
+    }
+  } catch (e) {
     return null;
   }
-}
-
-export async function decodeWhaleSwap(tx: any, whaleAddr: Address) {
-  if (!tx?.meta) return null;
-
-  const { preTokenBalances, postTokenBalances } = tx.meta;
-  const whaleStr = whaleAddr.toString();
-
-  // 1. Find which token the whale RECEIVED (The "Out" token)
-  // We look for a mint where the post-balance is higher than the pre-balance for the whale's owner.
-  const boughtToken = postTokenBalances?.find(post => {
-    const pre = preTokenBalances?.find(
-      p => p.mint === post.mint && p.owner === whaleStr
-    );
-    const preAmount = pre ? BigInt(pre.uiTokenAmount.amount) : 0n;
-    const postAmount = BigInt(post.uiTokenAmount.amount);
-
-    return post.owner === whaleStr && postAmount > preAmount;
-  });
-
-  // 2. Calculate the SOL spent (The "In" token)
-  // Find the change in the native SOL balance for the whale's index
-  const whaleIndex = tx.transaction.message.staticAccounts.findIndex(
-    acc => acc.toString() === whaleStr
-  );
-
-  const preSol = tx.meta.preBalances[whaleIndex] || 0n;
-  const postSol = tx.meta.postBalances[whaleIndex] || 0n;
-  const solSpent = preSol > postSol ? preSol - postSol : 0n;
-
-  if (!boughtToken) return null;
-
-  return {
-    mint: address(boughtToken.mint),
-    amountBought: boughtToken.uiTokenAmount.uiAmount,
-    solSpent: Number(solSpent) / 1e9,
-    whale: whaleAddr
-  };
+  return null;
 }

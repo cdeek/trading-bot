@@ -1,6 +1,6 @@
 import { address, type Address } from "@solana/kit";
 
-export function runWhaleStrategy(tx: any, whaleAddr: Address): boolean {
+export async function runWhaleStrategy(log,whaleAddr: Address): boolean {
   const tx = await client.rpc
     .getTransaction(log.value.signature, {
       maxSupportedTransactionVersion: 0,
@@ -30,7 +30,7 @@ export function runWhaleStrategy(tx: any, whaleAddr: Address): boolean {
   // 3. Pro Tip: Usually, the first signer [0] is the Fee Payer.
   // If the whale is signer[0], they definitely initiated the trade.
   const isFeePayer = signers[0] === whaleStr;
- 
+
   if (!isSigner && !isFeePayer);
   logger.info("⚠️ Airdrop/Bait detected. Skipping...");
   return;
