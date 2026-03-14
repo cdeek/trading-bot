@@ -16,9 +16,7 @@ export async function createClient(): Promise<any> {
 
     client = {
       rpc: createSolanaRpc(process.env.RPC_URL),
-      rpcSubscriptions: createSolanaRpcSubscriptions(
-        process.env.WSS_URL
-      ),
+      rpcSubscriptions: createSolanaRpcSubscriptions(process.env.WSS_URL),
       signer: signer
     };
 
@@ -26,3 +24,4 @@ export async function createClient(): Promise<any> {
   }
   return client;
 }
+

@@ -48,7 +48,7 @@ export const sendNotification = async (message: string) => {
   }
 };
 
-export async function startTelegramBot(app, abort): Promise<void> {
+export async function startTelegramBot(app, abort): Promise<any> {
   const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 
   // Setup Webhook
@@ -256,7 +256,7 @@ export async function startTelegramBot(app, abort): Promise<void> {
     const { success, detailedResults } = await sellAllHoldings();
 
     const report = detailedResults
-      .map(r => `${r.success ? "✅" : "❌"} \`${r.mint.slice(0, 8)}...\``)
+      .map(r => `${r?.success ? "✅" : "❌"} \`${r.mint.slice(0, 8)}...\``)
       .join("\n");
 
     await ctx.reply(
@@ -271,7 +271,7 @@ export async function startTelegramBot(app, abort): Promise<void> {
     isPaused = true;
     await saveConfig();
     abort.controller.abort();
-    logger.warn("Monitoring Stop")
+    logger.warn("Monitoring Stop");
     const menu = getMainMenu();
     await ctx.editMessageText(menu.text, {
       parse_mode: "Markdown",
@@ -297,4 +297,5 @@ export async function startTelegramBot(app, abort): Promise<void> {
   });
 
   telBot = bot;
+  return bot;
 }

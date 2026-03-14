@@ -4,7 +4,6 @@ dotenv.config();
 import express from "express";
 import { handleMomentum } from "./strategies/momentum.ts";
 import { createClient } from "./blockchain/solanaClient.ts";
-import { startMonitoring } from "./blockchain/eventListener.ts";
 import { startTelegramBot } from "./bots/telegram.ts";
 import { initConfig } from "../config/config.ts";
 import logger from "./utils/logger.ts";
@@ -19,8 +18,8 @@ const abort = {
 (async () => {
   try {
     await initConfig();
-    await createClient();
-    await startTelegramBot(app, abort);
+    const client = await createClient();
+    // const bot = await startTelegramBot(app, abort);
     logger.info("Telegram Bot is Active");
 
     app.use(express.json());
@@ -29,13 +28,14 @@ const abort = {
       handleMomentum(req.body);
     });
 
+    
     app.listen(8443, () => logger.info("Server listening on port 3000"));
+
+    process.on("SIGINT", () => {
+      abort.controller.abort();
+      process.exit();
+    });
   } catch (err) {
     logger.error(err);
   }
-
-  process.on("SIGINT", () => {
-    abort.controller.abort();
-    process.exit();
-  });
 })();
