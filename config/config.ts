@@ -25,33 +25,3 @@ export async function saveConfig() {
     logger.error(err, "⚠️ Failed to save config");
   }
 }
-
-export const BASE_MINT = "So11111111111111111111111111111111111111112";
-
-export const TARGETS = [
-  {
-    name: "PumpSwap",
-    addr: "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
-    trigger: /instruction: (create_pool|swap)/i
-  },
-  {
-    name: "Raydium CPM",
-    addr: "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
-    trigger: /instruction: (create_pool|initialize|swap)/i
-  },
-  {
-    name: "Meteora",
-    addr: "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN",
-    trigger: /instruction: (migrate_meteora_damm|swap)/i
-  },
-  // {
-  //   name: "SmartMoney",
-  //   addr: "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN",
-  //   trigger: /instruction: (whirlpoolswap|swap)/i
-  // },
-  // {
-  //   name: "SmartMoney",
-  //   addr: "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN",
-  //   trigger: /instruction: (whirlpoolswap|swap)/i
-  // }
-];
