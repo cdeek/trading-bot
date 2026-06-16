@@ -1,10 +1,19 @@
 import { Markup } from 'telegraf';
-import { isPause } from "../../index.ts";
+import { isPaused } from "../../../index.ts";
+import { config } from "../../../config/config.ts"; // Ensure these are imported
 
-// Mock UI configuration for demonstration
 const UI = {
   icons: { terminal: '💻', paused: '🔴', active: '🟢', target: '🎯', chart: '📈', alert: '🚨' },
   divider: '───────────────────'
+};
+
+// Helper function to split an array into chunks of a specific size
+const chunkArray = <T>(array: T[], size: number): T[][] => {
+  const chunks: T[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size));
+  }
+  return chunks;
 };
 
 export const getMainMenu = () => {
@@ -12,7 +21,6 @@ export const getMainMenu = () => {
     ? `${UI.icons.paused} PAUSED`
     : `${UI.icons.active} ACTIVE`;
 
-  // FIX: Escaped the dot in v2\.0 for MarkdownV2 compliance
   const text = [
     `${UI.icons.terminal} *TERMINAL DASHBOARD v2\\.0*`,
     UI.divider,
@@ -21,20 +29,31 @@ export const getMainMenu = () => {
     `_Select a module to configure:_`
   ].join("\n");
 
+  // 1. Single full-width button for the Engine control
+  const primaryRow = [
+    Markup.button.callback(
+      isPaused ? "▶️ Start Discovery Engine" : "⏸ Stop Discovery Engine",            
+      isPaused ? "start_discovery" : "stop_discovery" 
+    )
+  ];
+
+  // 2. Map config object to a flat list of buttons
+  const flatConfigButtons = Object.entries(config).map(([k, v]) => 
+    Markup.button.callback(`${k.toUpperCase()}: ${v}`, `edit_${k}`)
+  );
+
+  // 3. Chunk the config buttons into rows of 2 columns
+  const configRows = chunkArray(flatConfigButtons, 2);
+
   return {
     text,
-    // Add extra parsing metadata right inside the object
     extra: {
       parse_mode: 'MarkdownV2',
-      ...Markup.inlineKeyboard([
-        [
-          Markup.button.callback(
-            isPaused ? "▶️ Start discovery Engine" : "⏸ PStop dDiscovery Engine",            
-            isPaused ? "start_discovery" : "stop_discovery" // Clarified callback names
-          )
-        ],
-        Object.entries(config).map(([k, v])=> Markup.button.callback(`${k.toUpperCase()}: ${v}`, `edit_${k}`))
-      ])
+      // Combine the primary full-width row with the 2-column config rows
+      reply_markup: Markup.inlineKeyboard([
+        primaryRow, 
+        ...configRows
+      ]).reply_markup
     }
   };
 };

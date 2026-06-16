@@ -2,7 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import logger from "../src/utils/logger.ts";
 
-const CONFIG_PATH = path.resolve("config", "strategies.json");
+const CONFIG_PATH = path.resolve("config", "config.json");
 export let config = {};
 
 export async function initConfig() {

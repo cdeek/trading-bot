@@ -1,5 +1,5 @@
-import { logger } from './utils/logger';
-import { bot } from "../../index.ts"; 
+import logger from '../../utils/logger.ts';
+import { bot } from "../../../index.ts"; 
 
 export const sendNotification = async (message: string) => {
   try {

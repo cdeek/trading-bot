@@ -1,22 +1,24 @@
+import { initConfig } from "./config/config.ts"; 
+initConfig();
 import dotenv from "dotenv";
-dotenv.config();
-import crypto from "crypto"; 
 
+dotenv.config();
+
+import crypto from "crypto"; 
 import { Telegraf, Markup, session } from "telegraf";
 import { message } from "telegraf/filters";
-import { saveConfig, config, initConfig } from "../../config/config.ts";
-import logger from "../utils/logger.ts";
-import { getMainMenu } from "./services/controller/getMenu.ts";
-import { buy } from "./services/controller/buy.ts";
-import { edit, onText, type } from "./services/controller/edit.ts";
-import { discoverTokens } from "./services/discovery/index.ts";
+import logger from "./src/utils/logger.ts";
+import { getMainMenu } from "./src/services/controller/getMenu.ts";
+import { edit, onText } from "./src/services/controller/edit.ts";
+import { discoverTokens } from "./src/services/discovery/index.ts";
 
-// Fix 1: Uniform, clear state configuration naming
+// Fix 1: Uniform, clear state configuration naming 
+export const seenTokens = new Set();
 export let isPaused = true;
+
 let discoveryInterval: NodeJS.Timeout | null = null;
 
 export const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN!);
-await initConfig();
 
 // --- Middleware: Security & Session ---
 bot.use((ctx, next) => {

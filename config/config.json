@@ -1,10 +1,11 @@
 {
-  minLiquidity: 10000,
-  minMc: 50000,
-  maxMc: 800000,
-  minLiqMcRatio: 0.02,
-  minHolders: 50,
-  tokensLimit: 5,
-  maxAge,
-  V5m: 10000
+  "minLiquidity": 10000,
+  "minMc": 50000,
+  "maxMc": 800000,
+  "minLiqMcRatio": 0.02,
+  "minHolders": 50,
+  "tokensLimit": 5,
+  "maxAgeHr": 12,
+  "minAgeMn": 15,
+  "V5m": 10000
 }

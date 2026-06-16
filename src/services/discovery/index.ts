@@ -1,7 +1,6 @@
 import { hardFilter } from "./filters.ts";
 import { tokenScore } from "./analyzer.ts";
 import { rankAttentionTokens } from "./attentionTokens.ts";
-import { addToWatchlist } from "./watchlist.ts"; // Note: Imported but not used yet in this snippet
 import { sendNotification } from "../controller/sendNotification.ts";
 import logger from "../../utils/logger.ts";
 
@@ -18,9 +17,11 @@ export const discoverTokens = async () => {
     const tokens = responseData.data || [];
     const tokenArr = [];
 
-    for (const token of tokens) {
-      if (!hardFilter(token)) continue;
-      const analysis = tokenScore(token);
+    for (const token of tokens) { 
+      const age = Math.floor(Date.now() / 1000) - token.launch_at;
+     
+      if (!hardFilter(token, age)) continue;
+      const analysis = tokenScore(token, age);
       if (!analysis) continue;
       tokenArr.push(analysis);
     }
@@ -59,6 +60,6 @@ export const discoverTokens = async () => {
     await sendNotification(message); 
 
   } catch (err) {
-    logger.error("Error in discoverTokens:", err);
+    logger.error(err, "Error in discoverTokens:");
   }
 };

@@ -1,6 +1,6 @@
 import { config } from "../../../config/config.ts";
 
-export function tokenScore(t) {
+export function tokenScore(t, age) {
   const liquidity = Number(t.tvl || 0);
   const mcap = Number(t.market_cap || 0);
   const vol5m = Number(t.token_tx_volume_usd_5m || 0);
@@ -202,7 +202,8 @@ export function tokenScore(t) {
     name: t.name,
     symbol: t.symbol,
     mint: t.token,
-
+    age: +((age / 60).fixed(2)),
+    
     score: Number(score.toFixed(2)),
     rating,
 

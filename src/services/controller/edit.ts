@@ -1,6 +1,6 @@
 import { Markup } from 'telegraf';
 import { getMainMenu } from "./getMenu.ts";
-import { config, saveConfig } from "../../config/config.ts"; // Ensure these are imported
+import { config, saveConfig } from "../../../config/config.ts"; // Ensure these are imported
 import { analyzeToken } from "../discovery/tokenScore.ts"; 
 import logger from "../../utils/logger.ts"; 
 
@@ -44,10 +44,10 @@ export const onText = async (ctx) => {
   const isSolana = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(textInput || "");
 
   // Intercept if it matches either standard blockchain address format
-  if (isEVM || isSolana) {
+  if (isSolana) { 
     try {
       // Pass the address to your analyze function and exit early
-      const result = await fetch(`${process.env.AVE_BASE_URL}/ranks?topic=${'solana'}`, {
+      const result = await fetch(`${process.env.AVE_BASE_URL}/tokens/${textInput}-solana`, {
         headers: {
           "X-API-KEY": process.env.AVE_API_KEY || ""
         }
@@ -102,7 +102,7 @@ export const onText = async (ctx) => {
     ctx.session.editing = null;
   
     // Escaped punctuation values to avoid Markdown execution errors
-    await ctx.reply(`✔️ *Updated ${field} to \`${input}\`\\!*`, { 
+    await ctx.reply(`✔️ *Updated ${field} to ${input}`, { 
       parse_mode: "Markdown" 
     });
   
