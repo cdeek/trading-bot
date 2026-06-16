@@ -13,5 +13,14 @@ export function rankAttentionTokens(tokens) {
     seenTokens.add(token.mint);
   }
 
+  // 3. If seenTokens length reaches or exceeds 10, remove the oldest 5
+  // (JavaScript Sets preserve insertion order, so the first elements are the oldest)
+  if (seenTokens.size >= 20) {
+    const oldestTokens = Array.from(seenTokens).slice(0, 5);
+    for (const oldToken of oldestTokens) {
+      seenTokens.delete(oldToken);
+    }
+  }
+
   return rankedTokens;
 }

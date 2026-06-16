@@ -195,7 +195,7 @@ export function tokenScore(t, age) {
 
   if (score >= 85) rating = "🔥 GEM";
   else if (score >= 70) rating = "🚀 BREAKOUT";
-  else if (score >= 60) rating = "👀 WATCH";
+  else if (score >= 55) rating = "👀 WATCH";
   else return false;
 
   return {
