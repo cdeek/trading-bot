@@ -195,30 +195,23 @@ export function tokenScore(t, age) {
 
   if (score >= 85) rating = "🔥 GEM";
   else if (score >= 70) rating = "🚀 BREAKOUT";
-  else if (score >= 55) rating = "👀 WATCH";
+  else if (score >= 50) rating = "👀 WATCH";
   else return false;
 
   return {
     name: t.name,
-    symbol: t.symbol,
     mint: t.token,
-    age: +((age / 60).fixed(2)),
+    age: Number((age / 60).toFixed(2)),
     
     score: Number(score.toFixed(2)),
     rating,
 
     energy: Number(energy.toFixed(2)),
     flow: Number(flow.toFixed(2)),
-    buyerRatio: Number(buyerRatio.toFixed(2)),
-    avgBuySize: Number(avgBuySize.toFixed(2)),
 
     liquidity,
     mcap,
     holders,
-
-    p5,
-    p1h,
-    p24h,
 
     notes
   };

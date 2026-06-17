@@ -12,19 +12,15 @@ export function hardFilter(t, age) {
   if (t.is_in_blacklist === "1") return false;
   if (t.has_black_method === "1") return false;
 
-  // AVE risk
-  if (Number(t.ave_risk_level || 0) >= 2) return false;
-
-  // External risk score
+  // // External risk score
   if (Number(t.risk_score || 0) >= 80) return false;
 
-  // Mintable
+  // // Mintable
   if (t.is_mintable === "1") return false;
 
-  // Liquidity
+  // // Liquidity
   if (Number(t.tvl || 0) < config.minLiquidity) return false;
   
-  if (Number(t.token_tx_volume_usd_5m || 0) < config.V5m) return false;
   if (Number(t.holders || 0) < config.minHolders) return false;
   
   return true;

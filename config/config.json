@@ -4,8 +4,7 @@
   "maxMc": 800000,
   "minLiqMcRatio": 0.02,
   "minHolders": 50,
-  "tokensLimit": 5,
+  "tokensLimit": 2,
   "maxAgeHr": 12,
-  "minAgeMn": 15,
-  "V5m": 10000
+  "minAgeMn": 15
 }
