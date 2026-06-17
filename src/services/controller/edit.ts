@@ -102,9 +102,7 @@ export const onText = async (ctx) => {
     ctx.session.editing = null;
   
     // Escaped punctuation values to avoid Markdown execution errors
-    await ctx.reply(`✔️ *Updated ${field} to ${input}`, { 
-      parse_mode: "Markdown" 
-    });
+    await ctx.reply(`✔️ *Updated ${field} to ${input}`);
   
     // Pull fresh dashboard layout mirroring the new configuration settings
     const menu = getMainMenu();
