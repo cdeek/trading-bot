@@ -18,10 +18,8 @@ export const discoverTokens = async () => {
     const tokenArr = [];
 
     for (const token of tokens) { 
-      const age = Math.floor(Date.now() / 1000) - token.launch_at;
-     
-      if (!hardFilter(token, age)) continue;
-      const analysis = tokenScore(token, age);
+      if (!hardFilter(token)) continue;
+      const analysis = tokenScore(token);
       if (!analysis) continue;
       tokenArr.push(analysis);
     }
@@ -35,7 +33,6 @@ export const discoverTokens = async () => {
     passedTokens.forEach(t => { 
       message += `${t.mint}\n\n`;
       message += `🪙 *${t.name}* (Score: ${t.score} | ${t.rating ?? ""})\n`;
-      message += `• Age: $${t.age} minutes\n`;
       message += `• MCAP: $${t.mcap.toLocaleString()}\n`;
       message += `• Liq: $${t.liquidity.toLocaleString()}\n`;
       message += `• Holders: ${t.holders}\n`;

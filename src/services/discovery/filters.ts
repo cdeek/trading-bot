@@ -1,12 +1,6 @@
 import { config } from "../../../config/config.ts";
 
-export function hardFilter(t, age) { 
-  if (
-    +((age / 3600).toFixed(1)) > config.maxAgeHr ||
-    +((age / 60).toFixed(1)) <  config.minAgeMn
-  ) 
-    return false;
-
+export function hardFilter(t) { 
   // Guaranteed scam indicators
   if (t.is_honeypot === "1") return false;
   if (t.is_in_blacklist === "1") return false;

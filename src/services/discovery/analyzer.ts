@@ -1,6 +1,6 @@
 import { config } from "../../../config/config.ts";
 
-export function tokenScore(t, age) {
+export function tokenScore(t) {
   const liquidity = Number(t.tvl || 0);
   const mcap = Number(t.market_cap || 0);
   const vol5m = Number(t.token_tx_volume_usd_5m || 0);
@@ -195,13 +195,12 @@ export function tokenScore(t, age) {
 
   if (score >= 85) rating = "🔥 GEM";
   else if (score >= 70) rating = "🚀 BREAKOUT";
-  else if (score >= 50) rating = "👀 WATCH";
+  else if (score >= 55) rating = "👀 WATCH";
   else return false;
 
   return {
     name: t.name,
     mint: t.token,
-    age: Number((age / 60).toFixed(2)),
     
     score: Number(score.toFixed(2)),
     rating,
